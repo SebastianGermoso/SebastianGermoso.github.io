@@ -1,0 +1,409 @@
+﻿@using Prueba3
+@using Prueba3.Paypal
+
+@{
+    ViewBag.Title = "Carrito";
+    Layout = "~/Views/Shared/CliLayout.cshtml";
+}
+
+
+
+
+
+    <div class="card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="product-details mr-2">
+                        <div class="d-flex justify-content-between">
+                            <span class="ml-2">Detalle Compra</span>
+                            <a class="btn btn-danger" href="@Url.Action("Hola","Tienda")">Volver</a>
+                        </div>
+                        <hr class="mt-2 mb-2">
+                        
+                        <div id="productos-seleccionados">
+                            @foreach(var item in Model)
+                            {
+                                <div class="card mb-2 card-producto">
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-1">
+                                                <img class="rounded" src="~/imagenes/@item.IdproductoNavigation.Imagen" width="50">
+                                            </div>
+                                            <div class="col-7">
+                                                <div class="ml-2">
+                                                    <span class="spec">[@item.IdproductoNavigation.Nombre]</span>
+                                                    <span class="float-end">Precio: USD$[@item.IdproductoNavigation.Precio]</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-3">
+                                            <div class="d-flex justify-content-end controles">
+                                                <button class="btn btn-outline-secondary btn-restar rounded-0" type="button">
+                                                    <i class="fas fa-minus"></i>
+                                                </button>
+                                                <input class="form-control input-cantidad p-1 text-center rounded-0" style="width: 40px;" disabled="disabled" value="1" data-precio="[@item.IdproductoNavigation.Precio]" data-idproducto="[@item.IdproductoNavigation.Idproducto]">
+                                                <button class="btn btn-outline-secondary btn-sumar rounded-0" type="button">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                                </div>
+                                            </div>
+                                        <div class="col-1">
+                                            <button class="btn btn-outline-danger btn-eliminar" data-idcarrito="@item.Idcarrito" data-idproducto="@item.IdproductoNavigation.Idproducto">
+                                                <i class="far fa-trash-alt"></i>
+                                            </button>
+
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="payment-info">
+                                    <div>
+                                        <label class="credit-card-label mb-1 mt-2">Nombre del Titular</label>
+                                        <input type="text" class="form-control credit-inputs" placeholder="Nombre" id="nombre">
+                                    </div>
+                                    <div>
+                                        <label class="credit-card-label mb-1 mt-2">Ubicacion</label>
+                                        <input type="text" class="form-control credit-inputs" placeholder="Tu ubicación actual" id="ubicacion">
+                                        <button class="btn btn-primary mt-2" id="obtenerUbicacion">Obtener Ubicación</button>
+                                    </div>
+                                    <hr class="line">
+                                    <div class="d-flex justify-content-between information"><span>Total a Pagar</span><span id="totalPagar">USD$ 0</span></div>
+                                    <div class="d-flex justify-content-between information">
+                                        <span></span>
+                                        <span id="rdpagar">RD$ 0 </span>
+                                    </div>
+
+                                    <div class="d-grid">
+                                        <div id="paypal"></div>
+                                        <button class="btn btn-primary btn-block mt-3" id="btnProcesarPago" type="button" onclick="procesarPago()">Procesar Pago</button>
+                                    </div>
+                                    <div id="mensajeError" class="alert alert-danger" style="display: none;"></div>
+
+                                </div>
+                            </div>
+                        </div>
+
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+   
+@{
+    string restarUrl = Url.Action("Restar", "Tienda");
+    string sumarUrl = Url.Action("Sumar", "Tienda");
+}
+
+
+<!-- Carga del SDK de PayPal con un espacio de nombres diferente -->
+<script src="https://www.paypal.com/sdk/js?client-id=ATQtoOHb2OaiDsvJoZj4sw3Ktcn5LAMNS9kH4P1k5atZecPm4OMvuO094t80gQ1xOah7HtRtSnS8tt4_" data-namespace="paypal_sdk"></script>
+
+
+<script>
+
+    // Función para renderizar el botón de PayPal
+    function renderizarBotonPayPal() {
+        paypal_sdk.Buttons({
+            async createOrder() {
+                const response = await fetch("/Tienda/OnPostCreateOrder", {
+                    method: "POST"
+                })
+                const order = await response.json();
+                return order.id;
+
+            },
+            onApprove(data, actions) {
+                return fetch("/Tienda/OnPostCompleteOrder", {
+                    method: 'POST',
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        orderID: data.orderID
+                    })
+                }).then((response) => {
+                    return response.json();
+                }).then(json => {
+                    mostrarMensajeError("Funciono");
+                    ejecutarVentainsertar();
+
+                });
+            },
+            onCancel(data) {
+                return fetch('/Tienda?handler=CancelOrder', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        orderID: data.orderID
+                    })
+                })
+            },
+            cardFields: {
+                // ...
+                onError: error => {
+                    // Handle the error object
+                    console.error(error);
+                },
+                // ...
+            }
+        }).render('#paypal');
+        
+    }
+
+
+    function ejecutarVentainsertar() {
+        $.ajax({
+            url: '@Url.Action("ventainsertar", "Tienda")',
+            type: 'POST',
+            success: function (response) {
+                console.log('La venta se insertó exitosamente:', response.mensaje);
+                // Aquí puedes realizar cualquier otra acción que necesites en respuesta al éxito
+                location.reload();
+            },
+            error: function (xhr, status, error) {
+                console.error('Error al intentar insertar la venta:', error);
+                // Manejar cualquier error que pueda ocurrir durante la solicitud AJAX
+            }
+        });
+    }
+</script>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+    $(document).ready(function () {
+        $(".btn-eliminar").click(function () {
+            var idProducto = $(this).data("idproducto");
+
+            // Llamada a la función Ajax para eliminar el artículo del carrito
+            eliminarDelCarrito(idProducto);
+        });
+    });
+
+    function eliminarDelCarrito(idProducto) {
+        $.ajax({
+            url: '@Url.Action("EliminarCarrito", "Tienda")',
+            type: 'POST',
+            data: {
+                IdProducto: idProducto
+            },
+            success: function (response) {
+                console.log("Respuesta del servidor:", response);
+                // Aquí puedes agregar cualquier lógica adicional después de eliminar el artículo del carrito
+                location.reload();
+            },
+            error: function (xhr, status, error) {
+                console.error("Error al eliminar del carrito:", error);
+                // Aquí puedes manejar errores si es necesario
+            }
+        });
+    }
+
+
+
+
+
+
+    var restarUrl = '@Html.Raw(restarUrl)';
+    var sumarUrl = '@Html.Raw(sumarUrl)';
+
+    function procesarPago() {
+        var nombreTitular = document.getElementById("nombre").value;
+        var ubicacion = document.getElementById("ubicacion").value;
+        var totalUSD = parseFloat($("#totalPagar").text().replace("USD$ ", ""));
+
+        // Validar que el total a pagar no sea cero
+        if (totalUSD <= 0) {
+            mostrarMensajeError("El total a pagar debe ser mayor que cero.");
+            return;
+        }
+
+        // Validar que el nombre del titular no esté vacío
+        if (!nombreTitular.trim()) {
+            mostrarMensajeError("Debe ingresar el nombre del titular.");
+            return;
+        }
+
+        // Validar que la ubicación no esté vacía
+        if (!ubicacion.trim()) {
+            mostrarMensajeError("Debe ingresar la ubicación.");
+            return;
+        }
+
+        // Recopilar los datos de los productos
+        var productos = [];
+        $(".card-producto").each(function () {
+            var idProducto = $(this).find(".input-cantidad").data("idproducto");
+            var cantidad = parseInt($(this).find(".input-cantidad").val());
+            productos.push({ IdProducto: idProducto, Cantidad: cantidad });
+        });
+
+        // Si todas las validaciones son exitosas, enviar los datos al controlador
+        $.ajax({
+            url: '@Url.Action("ProcesarPago", "Tienda")',
+            type: 'POST',
+            data: {
+                nombreTitular: nombreTitular,
+                ubicacion: ubicacion,
+                totalUSD: totalUSD,
+                productos: productos
+            },
+            success: function (response) {
+                console.log("Pago procesado exitosamente:", response);
+                // Aquí puedes mostrar un mensaje de éxito al usuario o redirigirlo a otra página
+                renderizarBotonPayPal();
+            },
+            error: function (xhr, status, error) {
+                console.error("Error al procesar el pago:", error);
+                mostrarMensajeError("Error al procesar el pago. Por favor, inténtalo de nuevo más tarde.");
+            }
+        });
+
+    }
+
+    function mostrarMensajeError(mensaje) {
+        var mensajeErrorElemento = document.getElementById("mensajeError");
+        mensajeErrorElemento.textContent = mensaje;
+        mensajeErrorElemento.style.display = "block";
+    }
+
+
+    function mostrarMensajeError(mensaje) {
+        var mensajeErrorElemento = document.getElementById("mensajeError");
+        mensajeErrorElemento.textContent = mensaje;
+        mensajeErrorElemento.style.display = "block";
+    }
+
+
+
+
+    function obtenerUbicacion() {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                var latitude = position.coords.latitude;
+                var longitude = position.coords.longitude;
+
+                // URL de la API de geocodificación inversa de Google Maps
+                var url = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                console.log("tetet")
+                
+                document.getElementById("ubicacion").value = url;
+                // Realizar solicitud GET a la API de geocodificación inversa
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        var direccion = data.results[0].formatted_address;
+                        
+                        document.getElementById("ubicacion").value = direccion;
+                        console.log("Funciona");
+                    })
+                    .catch(error => {
+                        console.error("Error al obtener la dirección:", error);
+                        document.getElementById("txtdireccion").value = "Error al obtener la dirección";
+                    });
+            }, function (error) {
+                console.error("Error al obtener la ubicación:", error.message);
+            });
+        } else {
+            console.error("Geolocalización no está disponible en este navegador.");
+        }
+    }
+
+
+    // Evento de clic para el botón de obtener ubicación
+    document.getElementById("obtenerUbicacion").addEventListener("click", function () {
+        console.log("si")
+        obtenerUbicacion();
+    });
+
+    $(document).ready(function () {
+        // Evento de clic para el botón sumar
+        $(".btn-sumar").click(function () {
+            var inputCantidad = $(this).prevAll(".input-cantidad");
+            var idProducto = inputCantidad.data("idproducto");
+            restar(idProducto);
+            var valorActual = parseInt(inputCantidad.val());
+            inputCantidad.val(valorActual + 1);
+                actualizarTotal();
+        });
+
+        // Evento de clic para el botón restar
+        $(".btn-restar").click(function () {
+            var inputCantidad = $(this).nextAll(".input-cantidad");
+            var valorActual = parseInt(inputCantidad.val());
+            if (valorActual > 1) {
+                var idProducto = inputCantidad.data("idproducto");
+                inputCantidad.val(valorActual - 1);
+                sumar(idProducto);
+                actualizarTotal();
+            }
+        });
+
+        function actualizarTotal() {
+            var total = 0;
+            var totalrd = 0;
+            $(".card-producto").each(function () {
+                var precio = parseFloat($(this).find(".input-cantidad").data("precio"));
+                var cantidad = parseInt($(this).find(".input-cantidad").val());
+                total += precio * cantidad;
+                totalrd = total * 58;
+            });
+            $("#totalPagar").text("USD$ " + total.toFixed(2)); // Formatea el total como moneda
+            $("#rdpagar").text("RD$ " + totalrd.toFixed(2));
+        }
+
+        // Función para llamar al método restar del controlador
+        function restar(idProducto) {
+            $.ajax({
+                url: restarUrl,
+                type: 'POST',
+                data: { IDProducto: idProducto },
+                success: function (response) {
+                    console.log("Restado exitosamente");
+                },
+                error: function () {
+                    console.log("Error al restar");
+                }
+            });
+        }
+
+        // Función para llamar al método sumar del controlador
+        function sumar(idProducto) {
+            $.ajax({
+                url: sumarUrl,
+                type: 'POST',
+                data: { IDProducto: idProducto },
+                success: function (response) {
+                    console.log("Sumado exitosamente");
+                },
+                error: function () {
+                    console.log("Error al sumar");
+                }
+            });
+        }
+        actualizarTotal();
+
+        
+        
+        
+    });
+
+    
+</script>
